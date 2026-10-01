@@ -188,7 +188,7 @@ def _get_client() -> Groq:
         api_key = os.getenv("GROQ_API_KEY")
         if not api_key:
             raise ValueError("GROQ_API_KEY .env dosyasında eksik — console.groq.com/keys")
-        _client = Groq(api_key=api_key)
+        _client = Groq(api_key=api_key.strip().strip('"').strip("'"))
     return _client
 
 
@@ -222,13 +222,34 @@ def chat(user_input: str, history: list = None, mode: str = "classic") -> dict:
         history.append({"role": "user", "content": user_input})
         messages = [{"role": "system", "content": prompt}] + history
 
-    response = client.chat.completions.create(
-        model="llama-3.3-70b-versatile",
-        messages=messages,
-        max_tokens=512,
-        temperature=0.7,
-        response_format={"type": "json_object"},
-    )
+    models_to_try = [
+        "openai/gpt-oss-120b",
+        "openai/gpt-oss-20b",
+        "qwen/qwen3.8-27b",
+        "allam-2-7b",
+        "llama-3.1-8b-instant",
+    ]
+    last_err = None
+    response = None
+
+    for model_name in models_to_try:
+        try:
+            response = client.chat.completions.create(
+                model=model_name,
+                messages=messages,
+                max_tokens=512,
+                temperature=0.7,
+                response_format={"type": "json_object"},
+            )
+            print(f"Successfully generated with model: {model_name}", flush=True)
+            break
+        except Exception as e:
+            last_err = e
+            print(f"Model {model_name} failed: {e}. Trying next model...", flush=True)
+            continue
+
+    if response is None:
+        raise last_err
 
     raw = response.choices[0].message.content
     history.append({"role": "assistant", "content": raw})
